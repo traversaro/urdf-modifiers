@@ -1,0 +1,133 @@
+<robot name="twoLinks">
+  <!-- For all links, the assumed density is 1 -->
+  <!-- Moment of Inertia are computed manually accordingly to https://en.wikipedia.org/wiki/List_of_moments_of_inertia -->
+  <link name="root_link">
+    <inertial>
+      <!-- mass is 4*pi*(0.3/2)^3/3 -->
+      <mass value="0.014137" />
+      <!-- This inertia is computed as (2/5)*0.014137*(0.15)^2 -->
+      <inertia ixx="0.000127233" ixy="0.0" ixz="0.0" iyy="0.000127233" iyz="0.0" izz="0.000127233" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 -0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 -0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="joint1" type="continuous">
+    <origin xyz="0 0 1" rpy="0 -0 0" />
+    <axis xyz="0 1 0" />
+    <parent link="root_link" />
+    <child link="link1" />
+  </joint>
+  <link name="link1">
+    <inertial>
+      <!-- ((0.2)^2)*1 -->
+      <mass value="0.04" />
+      <origin xyz="0 0 -0.5" rpy="0 0 0"/>
+      <!-- Ixx&Iyy: 0.04*(0.04+1)/12  Izz: 0.04*(0.04 + 0.04)/12 -->
+      <inertia ixx="0.00346666666" ixy="0.0" ixz="0.0" iyy="0.00346666666" iyz="0.0" izz="0.00026666666" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.5" rpy="0 -0 0"/>
+      <geometry>
+        <box size="0.2 0.2 1.0"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.5" rpy="0 -0 0"/>
+      <geometry>
+        <box size="0.2 0.2 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="middle_link_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="link1" />
+    <child link="middle_link" />
+  </joint>
+  <link name="middle_link">
+    <inertial>
+      <!-- mass is 4*pi*(0.3/2)^3/3 -->
+      <mass value="0.014137" />
+      <!-- This inertia is computed as (2/5)*0.014137*(0.15)^2 -->
+      <inertia ixx="0.000127233" ixy="0.0" ixz="0.0" iyy="0.000127233" iyz="0.0" izz="0.000127233" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 -0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 -0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="joint2" type="continuous">
+    <origin xyz="0 0 1" rpy="0 -0 0" />
+    <axis xyz="0 0 1" />
+    <parent link="middle_link" />
+    <child link="link2" />
+  </joint>
+  <link name="link2">
+    <inertial>
+      <!-- pi*(0.1)^2*1 -->
+      <mass value="0.031416" />
+      <origin xyz="0 0 -0.5" rpy="0 0 0"/>
+      <!-- Ixx&Iyy: 0.031416/12  Izz: 0.031416*0.04/2 -->
+      <inertia ixx="0.002618" ixy="0.0" ixz="0.0" iyy="0.002618" iyz="0.0" izz="0.00062832" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.5" rpy="0 -0 0"/>
+      <geometry>
+        <cylinder radius="0.1" length="1"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.5" rpy="0 -0 0"/>
+      <geometry>
+        <cylinder radius="0.1" length="1"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="joint_end_effector" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="link2" />
+    <child link="end_effector" />
+  </joint>
+  <link name="end_effector">
+    <inertial>
+      <!-- mass is 4*pi*(0.3/2)^3/3 -->
+      <mass value="0.014137" />
+      <!-- This inertia is computed as (2/5)*0.014137*(0.15)^2 -->
+      <inertia ixx="0.000127233" ixy="0.0" ixz="0.0" iyy="0.000127233" iyz="0.0" izz="0.000127233" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 -0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 -0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </collision>
+  </link>
+  <!-- Workaround -->
+  <gazebo></gazebo>
+</robot>
