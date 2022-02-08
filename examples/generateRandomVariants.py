@@ -11,6 +11,13 @@ import math
 import numpy as np
 from urdfModifiers.geometry import * 
 
+from enum import Enum
+
+class LinkAndJointModifierType(Enum):
+    PURE_SCALING = 1
+    SCALING_WITH_INITIAL_OFFSET_MANTAINED = 2
+    SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED = 3
+
 ## This class will be eventually ported in urdf-modifiers, it is just reported here to have a self-contained example 
 @dataclass
 class LinkAndJointModifier():
@@ -22,11 +29,15 @@ class LinkAndJointModifier():
         # * that all the link have the same orientation (i.e. rpy element of all joints is 0.0 0.0 0.0)
         # * that the dimension along which the modification is done is always along the z
         self.dimension = geometry.Side.DEPTH
+        # Specify the case to use
+        # self.scaling_type = LinkAndJointModifierType.PURE_SCALING
+        # self.scaling_type = LinkAndJointModifierType.SCALING_WITH_INITIAL_OFFSET_MANTAINED
+        self.scaling_type = LinkAndJointModifierType.SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED
 
     @classmethod
     def from_link_name(cls, link_name, robot):
         """Creates an instance of LinkAndJointModifier by passing the robot object and link name"""
-        return cls(LinkAndJointModifier.get_link_element_by_name(link_name, robot), LinkAndJointModifier.get_joint_element_by_child_link_name(link_name, robot) )
+        return cls(LinkAndJointModifier.get_link_element_by_name(link_name, robot), LinkAndJointModifier.get_joint_element_by_parent_link_name(link_name, robot) )
 
     @staticmethod
     def get_link_element_by_name(link_name, robot):
@@ -38,50 +49,47 @@ class LinkAndJointModifier():
             return None
 
     @staticmethod
-    def get_joint_element_by_child_link_name(link_name, robot):
-        """Explores the robot looking for the link whose name matches the first argument, and then return the joint connecting it to its parent"""
+    def get_joint_element_by_parent_link_name(link_name, robot):
+        """Explores the robot looking for the link whose name matches the first argument, and then return the joint connecting it to its child"""
         for jnt in robot.joints:
-            if jnt.child == link_name:
+            if jnt.parent == link_name: 
                 return jnt
         return None
 
     def modify(self, modifications):
         """Performs the dimension and density modifications to the current link"""
+        # print(f"Before modifying {self.link_element.name}: visual_shape_length: {self.get_visual_shape_length()} joint_offset: {self.get_joint_offset()} visual_offset: {self.get_visual_offset()}  ")
+        # print(f"Before modifying {self.link_element.name}: starting offset: {self.get_visual_offset()-self.get_visual_shape_length()/2} end_offset: {self.get_visual_offset()+self.get_visual_shape_length()/2-self.get_joint_offset()}")
+
         original_density = self.calculate_density()
-        original_radius = self.get_radius()
-        original_length = self.get_significant_length()
+        original_visual_shape_length = self.get_visual_shape_length()
+        original_joint_offset = self.get_joint_offset()
+        original_visual_offset = self.get_visual_offset()
         original_mass = self.get_mass()
         if "radius" in modifications:
-            if modifications["radius"][1]:
-                self.set_radius(modifications["radius"][0])
-            else:
-                if original_radius is not None:
-                    self.set_radius(original_radius * modifications["radius"][0])
+            raise Exception('radius modification not supported by LinkAndJointModifier')
         if "dimension" in modifications:
             if modifications["dimension"][1]:
-                self.set_length(modifications["dimension"][0])
+                raise Exception('Absolute dimention modification not supported by LinkAndJointModifier')
             else:
-                if original_length is not None:
-                    self.set_length(original_length * modifications["dimension"][0])
+                self.modify_visual_shape_length(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
+                self.modify_visual_link_origin(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
+                self.modify_joint_origin(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
         if "density" in modifications:
-            if modifications["density"][1]:
-                self.set_density(modifications["density"][0])
-            else:
-                self.set_density(original_density * modifications["density"][0])
+            raise Exception('density modification not supported by LinkAndJointModifier')
         if "mass" in modifications:
-            if modifications["mass"][1]:
-                self.set_mass(modifications["mass"][0])
-            else:
-                self.set_mass(original_mass * modifications["mass"][0])
+            raise Exception('mass modification not supported by LinkAndJointModifier')
         self.update_inertia()
-        self.modify_visual_link_origin(modifications, original_length)
-        self.modify_joint_origin(modifications)
+
+        # print(f"After modifying {self.link_element.name}: visual_shape_length: {self.get_visual_shape_length()} joint_offset: {self.get_joint_offset()} visual_offset: {self.get_visual_offset()}  ")
+        # print(f"After modifying {self.link_element.name}: starting offset: {self.get_visual_offset()-self.get_visual_shape_length()/2} end_offset: {self.get_visual_offset()+self.get_visual_shape_length()/2-self.get_joint_offset()}")
+
 
     def get_visual(self):
         """Returns the visual object of a link"""
         return self.link_element.visuals[0]
 
-    def get_significant_length(self):
+    def get_visual_shape_length(self):
         """Gets the significant length for a cylinder or box geometry"""
         geometry_type, visual_data = self.get_geometry(self.get_visual())
         if (geometry_type == geometry.Geometry.BOX):
@@ -99,32 +107,49 @@ class LinkAndJointModifier():
         else:
             return None
 
-    def get_radius(self):
-        """Returns the radius if the link geometry is cylinder or sphere and None otherwise"""
-        geometry_type, visual_data = self.get_geometry(self.get_visual())
-        return visual_data.radius if geometry_type == geometry.Geometry.CYLINDER or geometry_type == geometry.Geometry.SPHERE else None
+    def get_index_to_change(self):
+        visual_obj = self.get_visual()
+        geometry_type, visual_data = self.get_geometry(visual_obj)
+        if (geometry_type == geometry.Geometry.CYLINDER):
+            index_to_change = 2
+        else:
+            if (self.dimension == geometry.Side.WIDTH):
+                index_to_change = 0
+            if (self.dimension == geometry.Side.HEIGHT):
+                index_to_change = 1
+            if (self.dimension == geometry.Side.DEPTH):
+                index_to_change = 2
 
-    def set_radius(self, new_radius):
-        """Sets the radius of a link if its geometry is cylider or sphere"""
-        geometry_type, visual_data = self.get_geometry(self.get_visual())
-        if (geometry_type == geometry.Geometry.CYLINDER or geometry_type == geometry.Geometry.SPHERE):
-            visual_data.radius = new_radius
+        return index_to_change
 
-    def set_length(self, length):
+    def get_joint_offset(self):
+        index_to_change = self.get_index_to_change()
+        joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
+        return joint_el_xyz_rpy[index_to_change]
+
+    def get_visual_offset(self):
+        visual_obj = self.get_visual()
+        geometry_type, visual_data = self.get_geometry(visual_obj)
+        index_to_change = self.get_index_to_change()
+        visual_offset_xyz_rpy = matrix_to_xyz_rpy(visual_obj.origin)
+        return visual_offset_xyz_rpy[index_to_change]
+
+    def modify_visual_shape_length(self, modifications, original_visual_shape_length, original_joint_offset, original_visual_offset):
         """Modifies a link's length, in a manner that is logical with its geometry"""
         geometry_type, visual_data = self.get_geometry(self.get_visual())
+        scale = modifications["dimension"][0]
+        if (self.scaling_type == LinkAndJointModifierType.PURE_SCALING):
+            new_length = scale*original_visual_shape_length
+        elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
+            new_length = scale*original_visual_shape_length
+        elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED):
+            new_length = original_visual_shape_length - (1 - scale)*abs(original_joint_offset)
+
         if (geometry_type == geometry.Geometry.BOX):
-            if (self.dimension is not None):
-                if (self.dimension == geometry.Side.WIDTH):
-                    visual_data.size[0] = length
-                elif (self.dimension == geometry.Side.HEIGHT):
-                    visual_data.size[1] = length
-                elif (self.dimension == geometry.Side.DEPTH):
-                    visual_data.size[2] = length
-            else:
-                print(f"Error modifying link {self.link_element.name}'s volume: Box geometry with no dimension")
+            index_to_change = self.get_index_to_change()
+            visual_data.size[index_to_change] = new_length
         elif (geometry_type == geometry.Geometry.CYLINDER):
-            visual_data.length = length
+            visual_data.length = new_length
 
     @staticmethod
     def get_visual_static(link):
@@ -163,7 +188,7 @@ class LinkAndJointModifier():
         geometry_type, visual_data = self.get_geometry(self.get_visual())
         return self.get_mass() / self.calculate_volume(geometry_type, visual_data)
 
-    def modify_visual_link_origin(self, modifications, original_length):
+    def modify_visual_link_origin(self, modifications, original_visual_shape_length, original_joint_offset, original_visual_offset):
         """Modifies the position of the origin by a given amount"""
         visual_obj = self.get_visual()
         geometry_type, visual_data = self.get_geometry(visual_obj)
@@ -178,7 +203,15 @@ class LinkAndJointModifier():
                     index_to_change = 2
                 scale = modifications["dimension"][0]
                 joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
-                xyz_rpy[index_to_change] = xyz_rpy[index_to_change] + (1 - scale)*joint_el_xyz_rpy[index_to_change] - np.sign(joint_el_xyz_rpy[index_to_change])*(1 - scale)*original_length/2
+                # Case 0: 
+                if (self.scaling_type == LinkAndJointModifierType.PURE_SCALING):
+                    xyz_rpy[index_to_change] = scale*original_visual_offset
+                # Case 1:
+                elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
+                    xyz_rpy[index_to_change] = original_visual_offset + np.sign(original_joint_offset)*(scale - 1)*original_visual_shape_length/2
+                # Case 2:
+                elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED):
+                    xyz_rpy[index_to_change] = original_visual_offset + (scale - 1)*original_joint_offset/2
                 visual_obj.origin = xyz_rpy_to_matrix(xyz_rpy) 
             else:
                 print(f"Error modifying link {self.link_element.name}'s origin: Box geometry with no dimension")
@@ -187,20 +220,27 @@ class LinkAndJointModifier():
             index_to_change = 2
             scale = modifications["dimension"][0]
             joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
-            xyz_rpy[index_to_change] = xyz_rpy[index_to_change] + (1 - scale)*joint_el_xyz_rpy[index_to_change] - np.sign(joint_el_xyz_rpy[index_to_change])*(1 - scale)*original_length/2
+            # xyz_rpy[index_to_change] = xyz_rpy[index_to_change] + (1 - scale)*joint_el_xyz_rpy[index_to_change] - np.sign(joint_el_xyz_rpy[index_to_change])*(1 - scale)*original_length/2
+            # Case 0: 
+            if (self.scaling_type == LinkAndJointModifierType.PURE_SCALING):
+                xyz_rpy[index_to_change] = scale*original_visual_offset
+            # Case 1:
+            elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
+                xyz_rpy[index_to_change] = original_visual_offset + np.sign(original_joint_offset)*(scale - 1)*original_visual_shape_length/2
+            # Case 2:
+            elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED):
+                xyz_rpy[index_to_change] = original_visual_offset + (scale - 1)*original_joint_offset/2
             visual_obj.origin = xyz_rpy_to_matrix(xyz_rpy) 
         elif (geometry_type == geometry.Geometry.SPHERE):
             return
 
-    def modify_joint_origin(self, modifications):
+    def modify_joint_origin(self, modifications, original_visual_shape_length, original_joint_offset, original_visual_offset):
         """Modifies the position of the origin by a given amount"""
         xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
-        if "dimension" in modifications:
-            if modifications["dimension"][1]:
-                xyz_rpy[2] = modifications["dimension"][0]
-            else:
-                xyz_rpy[2] = xyz_rpy[2] * modifications["dimension"][0]
-
+        index_to_change = self.get_index_to_change()
+        scale = modifications["dimension"][0]
+        # For all cases, the joint offset is always just scale
+        xyz_rpy[index_to_change] =  scale * original_joint_offset
         self.joint_element.origin = xyz_rpy_to_matrix(xyz_rpy)
 
     def set_density(self, density):
@@ -278,7 +318,7 @@ class OutputVisualization():
         self.env.setElementVisibility('world_frame',False)
         self.frames = self.viz.frames()  
         cam = self.viz.camera()
-        cam.setPosition(iDynTree.Position(6.0,0.0,0.5))
+        cam.setPosition(iDynTree.Position(10.0,0.0,0.5))
         self.viz.camera().animator().enableMouseControl(True)
     
     def add_and_update_model(self, model_name,urdf_path, joints_list, root_link, joint_position, lenght_vector,  delta = 0, ChangeColor = False): 
@@ -328,7 +368,7 @@ def modify_urdf(urdf_path_original, urdf_path_modified, link_groups_list, lenght
     robot, gazebo_plugin_text = urdfModifiers.utils.utils.load_robot_and_gazebo_plugins(urdf_path_original, dummy_file)
 
     # Add link modifiers
-    use_new_modifiers = False
+    use_new_modifiers = True
     if use_new_modifiers:
         for i in range(len(link_groups_list)):
             for j in range(len(link_groups_list[i])):
@@ -377,7 +417,7 @@ link_groups_list = [['link1'], ['link2']]
 root_link = 'root_link'
 
 # Number of random models that we want to visualize
-nrOfRandomModels = 30
+nrOfRandomModels = 1
 
 # Visualizing the output 
 VisualizationHelper = OutputVisualization()
@@ -397,13 +437,13 @@ for i in range(nrOfRandomModels):
     modifiedModelName = "modified" + str(i)
     # Generate random multiplies in the range [0.5,2.0]
     lengths_multiplier = 1.5*np.random.rand(len(link_groups_list)) + 0.5
-    # For debug, one may want to set all length multiplier to 1
-    lengths_multiplier = np.ones(len(link_groups_list))
+    # For debug, one may want to set all length multiplier to 1 or constant number
+    lengths_multiplier = 3*np.ones(len(link_groups_list))
     modify_urdf(urdf_path, urdf_path_modified, link_groups_list, lengths_multiplier)
     VisualizationHelper.add_and_update_model(modifiedModelName, urdf_path_modified, joints_ctrl_name_list, root_link, joint_positions, joint_offsets, -0.25)
 
     # Visualize the modified model for some time
-    while((time.time()-time_now)<0.5 and VisualizationHelper.viz.run()):
+    while((time.time()-time_now)<100.5 and VisualizationHelper.viz.run()):
         VisualizationHelper.viz.draw()
         # This should save the image to file, for some reason is just saving 
         # an empty black image, see https://github.com/robotology/idyntree/issues/965
