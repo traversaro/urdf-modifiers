@@ -66,18 +66,18 @@ class LinkAndJointModifier():
         original_joint_offset = self.get_joint_offset()
         original_visual_offset = self.get_visual_offset()
         original_mass = self.get_mass()
-        if "radius" in modifications:
+        if modifications.radius:
             raise Exception('radius modification not supported by LinkAndJointModifier')
-        if "dimension" in modifications:
-            if modifications["dimension"][1]:
+        if modifications.dimension:
+            if modifications.dimension.absolute:
                 raise Exception('Absolute dimention modification not supported by LinkAndJointModifier')
             else:
                 self.modify_visual_shape_length(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
                 self.modify_visual_link_origin(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
                 self.modify_joint_origin(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
-        if "density" in modifications:
+        if modifications.density:
             raise Exception('density modification not supported by LinkAndJointModifier')
-        if "mass" in modifications:
+        if modifications.mass:
             raise Exception('mass modification not supported by LinkAndJointModifier')
         self.update_inertia()
 
@@ -137,7 +137,7 @@ class LinkAndJointModifier():
     def modify_visual_shape_length(self, modifications, original_visual_shape_length, original_joint_offset, original_visual_offset):
         """Modifies a link's length, in a manner that is logical with its geometry"""
         geometry_type, visual_data = self.get_geometry(self.get_visual())
-        scale = modifications["dimension"][0]
+        scale = modifications.dimension.value
         if (self.scaling_type == LinkAndJointModifierType.PURE_SCALING):
             new_length = scale*original_visual_shape_length
         elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
@@ -201,7 +201,7 @@ class LinkAndJointModifier():
                     index_to_change = 1
                 if (self.dimension == geometry.Side.DEPTH):
                     index_to_change = 2
-                scale = modifications["dimension"][0]
+                scale = modifications.dimension.value
                 joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
                 # Case 0: 
                 if (self.scaling_type == LinkAndJointModifierType.PURE_SCALING):
@@ -218,7 +218,7 @@ class LinkAndJointModifier():
         elif (geometry_type == geometry.Geometry.CYLINDER):
             # The cylinder is always aligned with the z direction
             index_to_change = 2
-            scale = modifications["dimension"][0]
+            scale = modifications.dimension.value
             joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
             # xyz_rpy[index_to_change] = xyz_rpy[index_to_change] + (1 - scale)*joint_el_xyz_rpy[index_to_change] - np.sign(joint_el_xyz_rpy[index_to_change])*(1 - scale)*original_length/2
             # Case 0: 
@@ -238,7 +238,7 @@ class LinkAndJointModifier():
         """Modifies the position of the origin by a given amount"""
         xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
         index_to_change = self.get_index_to_change()
-        scale = modifications["dimension"][0]
+        scale = modifications.dimension.value
         # For all cases, the joint offset is always just scale
         xyz_rpy[index_to_change] =  scale * original_joint_offset
         self.joint_element.origin = xyz_rpy_to_matrix(xyz_rpy)
@@ -376,8 +376,8 @@ def modify_urdf(urdf_path_original, urdf_path_modified, link_groups_list, lenght
                 # Once the class is available in urf-modifiers, this line will be:
                 # link_modifier = urdfModifiers.core.linkAndJointModifier.LinkAndJointModifier.from_link_name(link_name, robot)
                 link_modifier = LinkAndJointModifier.from_link_name(link_name, robot)
-                modifications = {}
-                modifications[urdfModifiers.utils.utils.geometry.Modification.DIMENSION] = [lenghts_vector[i], urdfModifiers.utils.utils.geometry.Modification.MULTIPLIER]
+                modifications = urdfModifiers.core.modification.Modification()
+                modifications.add_dimension(lenghts_vector[i], absolute=False)
                 link_modifier.modify(modifications)
     else:
         # Copied (with modifications) from https://github.com/ami-iit/element_hardware-intelligence/blob/b8d0f41cf8571ab03b3df74418b9387b6efb5292/Software/NonLinearOptimization/Optimizer.py#L402
@@ -386,14 +386,14 @@ def modify_urdf(urdf_path_original, urdf_path_modified, link_groups_list, lenght
         for i in range(len(link_groups_list)):
             link_name = link_groups_list[i][0]
             link_modifier = urdfModifiers.core.linkModifier.LinkModifier.from_name(link_name, robot, 0.0, dimension=geometry.Side.DEPTH)
-            modifications = {}
-            modifications[urdfModifiers.utils.utils.geometry.Modification.DIMENSION] = [lenghts_vector[i], urdfModifiers.utils.utils.geometry.Modification.MULTIPLIER]
+            modifications = urdfModifiers.core.modification.modification.Modification()
+            modifications.add_dimension(lenghts_vector[i], absolute=False)
             link_modifier.modify(modifications)
 
         for i in range(len(link_groups_list)):
             joint_name = get_joint_name_from_parent_link(robot, link_groups_list[i][0])
             joint_modifier = urdfModifiers.core.jointModifier.JointModifier.from_name(joint_name, robot, 0.0)
-            modifications[urdfModifiers.utils.utils.geometry.Modification.DIMENSION] = [lenghts_vector[i], urdfModifiers.utils.utils.geometry.Modification.MULTIPLIER]
+            urdfModifiers.add_dimension(lenghts_vector[i], absolute=False)
             joint_modifier.modify(modifications)     
 
     urdfModifiers.utils.utils.write_urdf_to_file(robot, urdf_path_modified, gazebo_plugin_text)
