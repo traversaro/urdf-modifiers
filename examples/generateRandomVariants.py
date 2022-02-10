@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import math
 import numpy as np
 
-import LinkAndJointModifierV1 as LinkAndJointModifierV1
+from LinkAndJointModifierV1 import LinkAndJointModifierV1
 
 def GetIDynTreeTransfMatrix(s,H): 
     

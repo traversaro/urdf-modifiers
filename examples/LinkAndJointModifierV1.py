@@ -5,7 +5,7 @@ from urdfModifiers.geometry import *
 from dataclasses import dataclass
 
 import numpy as np
-
+import math
 
 from enum import Enum
 
@@ -91,18 +91,18 @@ class LinkAndJointModifierV1():
         original_joint_offset = self.get_joint_offset()
         original_visual_offset = self.get_visual_offset()
         original_mass = self.get_mass()
-        if "radius" in modifications:
+        if modifications.radius:
             raise Exception('radius modification not supported by LinkAndJointModifier')
-        if "dimension" in modifications:
-            if modifications["dimension"][1]:
+        if modifications.dimension:
+            if modifications.dimension.absolute:
                 raise Exception('Absolute dimention modification not supported by LinkAndJointModifier')
             else:
                 self.modify_visual_shape_length(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
                 self.modify_visual_link_origin(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
                 self.modify_joint_origin(modifications, original_visual_shape_length, original_joint_offset, original_visual_offset)
-        if "density" in modifications:
+        if modifications.density:
             raise Exception('density modification not supported by LinkAndJointModifier')
-        if "mass" in modifications:
+        if modifications.mass:
             raise Exception('mass modification not supported by LinkAndJointModifier')
         self.update_inertia()
 
@@ -165,7 +165,7 @@ class LinkAndJointModifierV1():
     def modify_visual_shape_length(self, modifications, original_visual_shape_length, original_joint_offset, original_visual_offset):
         """Modifies a link's length, in a manner that is logical with its geometry"""
         geometry_type, visual_data = self.get_geometry(self.get_visual())
-        scale = modifications["dimension"][0]
+        scale = modifications.dimension.value
         if (self.scaling_type == LinkAndJointModifierV1Type.PURE_SCALING):
             new_length = scale*original_visual_shape_length
         elif (self.scaling_type == LinkAndJointModifierV1Type.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
@@ -229,7 +229,7 @@ class LinkAndJointModifierV1():
                     index_to_change = 1
                 if (self.dimension == geometry.Side.DEPTH):
                     index_to_change = 2
-                scale = modifications["dimension"][0]
+                scale = modifications.dimension.value
                 joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
                 # Case 0: 
                 if (self.scaling_type == LinkAndJointModifierV1Type.PURE_SCALING):
@@ -246,17 +246,17 @@ class LinkAndJointModifierV1():
         elif (geometry_type == geometry.Geometry.CYLINDER):
             # The cylinder is always aligned with the z direction
             index_to_change = 2
-            scale = modifications["dimension"][0]
+            scale = modifications.dimension.value
             joint_el_xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
             # xyz_rpy[index_to_change] = xyz_rpy[index_to_change] + (1 - scale)*joint_el_xyz_rpy[index_to_change] - np.sign(joint_el_xyz_rpy[index_to_change])*(1 - scale)*original_length/2
             # Case 0: 
-            if (self.scaling_type == LinkAndJointModifierType.PURE_SCALING):
+            if (self.scaling_type == LinkAndJointModifierV1Type.PURE_SCALING):
                 xyz_rpy[index_to_change] = scale*original_visual_offset
             # Case 1:
-            elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
+            elif (self.scaling_type == LinkAndJointModifierV1Type.SCALING_WITH_INITIAL_OFFSET_MANTAINED):
                 xyz_rpy[index_to_change] = original_visual_offset + np.sign(original_joint_offset)*(scale - 1)*original_visual_shape_length/2
             # Case 2:
-            elif (self.scaling_type == LinkAndJointModifierType.SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED):
+            elif (self.scaling_type == LinkAndJointModifierV1Type.SCALING_WITH_BOTH_INITIAL_AND_FINAL_OFFSET_MANTAINED):
                 xyz_rpy[index_to_change] = original_visual_offset + (scale - 1)*original_joint_offset/2
             visual_obj.origin = xyz_rpy_to_matrix(xyz_rpy) 
         elif (geometry_type == geometry.Geometry.SPHERE):
@@ -266,7 +266,7 @@ class LinkAndJointModifierV1():
         """Modifies the position of the origin by a given amount"""
         xyz_rpy = matrix_to_xyz_rpy(self.joint_element.origin)
         index_to_change_in_link_frame = self.get_index_to_change_in_link_frame()
-        scale = modifications["dimension"][0]
+        scale = modifications.dimension.value
         # For all cases, the joint offset is always just scale
         xyz_rpy[index_to_change_in_link_frame] =  scale * original_joint_offset
         self.joint_element.origin = xyz_rpy_to_matrix(xyz_rpy)
